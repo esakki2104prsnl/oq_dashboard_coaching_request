@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OQ Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script
+      src="https://kit.fontawesome.com/b043ecdb87.js"
+      crossorigin="anonymous"
+    ></script>
+    <style>
+      body {
+        font-family: "Poppins", sans-serif;
+        background: linear-gradient(135deg, #1f4037, #99f2c8);
+        color: #fff;
+        margin: 0;
+        padding: 0;
+      }
+      .header {
+        background: #222;
+        color: white;
+        padding: 20px;
+        font-size: 28px;
+        font-weight: bold;
+        text-align: center;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+      }
+      .dashboard {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+        padding: 20px;
+        justify-content: center;
+      }
+      .sidebar,
+      .content {
+        background: #2c3e50;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        width: 100%;
+        max-width: 600px;
+      }
+      .content {
+        flex: 1;
+      }
+      .global-info {
+        font-size: 18px;
+        font-weight: bold;
+        margin-bottom: 15px;
+        color: #ff9f43;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #fff;
+        color: #333;
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      th,
+      td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+      }
+      th {
+        background: #ff9f43;
+        color: white;
+      }
+
+      tr:not(:has(td:first-child, td:nth-child(2))):hover {
+        background-color: #f8c291;
+        /* transform: scale(1.05); */
+        /* transition: transform 10s ease-in-out; */
+      }
+      canvas {
+        background: #fff;
+        border-radius: 12px;
+        width: 100% !important;
+        height: auto !important;
+      }
+      @media (min-width: 1500px) {
+        .sidebar {
+          max-width: 20%;
+          max-height: fit-content;
+        }
+        .content {
+          max-width: 55%;
+          max-height: fit-content;
+        }
+      }
+      @media (max-width: 1500px) {
+        .sidebar {
+          max-width: 35%;
+        }
+      }
+      @media (max-width: 768px) {
+        .dashboard {
+          flex-direction: column;
+          align-items: center;
+        }
+        .sidebar {
+          min-width: 20%;
+        }
+        .content {
+          max-width: 80%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">Coaching History Dashboard</div>
+    <div class="dashboard">
+      <div class="sidebar">
+        <h3>Bar Chart</h3>
+        <canvas id="chart"></canvas>
+      </div>
+      <div class="content">
+        <div class="global-info" id="globalInfo"></div>
+        <h2>Employee Coaching History</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Employee Number</th>
+              <th>Title</th>
+              <th>Session List</th>
+              <th>Personal Notes</th>
+              <th>Session Time</th>
+              <th>Overall Time</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <script>
+      async function fetchExcelData(filePath) {
+        try {
+          const response = await fetch(filePath);
+          if (!response.ok) throw new Error("Failed to fetch Excel file");
+          const arrayBuffer = await response.arrayBuffer();
+          const workbook = XLSX.read(arrayBuffer, { type: "array" });
+          const sheetName = workbook.SheetNames[0];
+          const sheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(sheet, { raw: false });
+          processAndDisplayData(jsonData);
+          generateChart(jsonData);
+        } catch (error) {
+          console.error("Error loading Excel file:", error);
+        }
+      }
+      function processAndDisplayData(data) {
+        const tableBody = document.getElementById("tableBody");
+        const globalInfo = document.getElementById("globalInfo");
+        tableBody.innerHTML = "";
+        const uniqueRecords = {};
+        data.forEach((session) => {
+          const key = `${session.EmployeeNumber}-${session.Title}`;
+          if (!uniqueRecords[key]) {
+            uniqueRecords[key] = {
+              EmployeeNumber: session.EmployeeNumber || "N/A",
+              Title: session.Title || "N/A",
+              Sessions: [],
+            };
+          }
+          uniqueRecords[key].Sessions.push({
+            SessionList: session.SessionList || "N/A",
+            PersonalNotes: session.PersonalNotes || "N/A",
+            SessionTime: session.SessionTime || "N/A",
+            OverallTime: session.OverallTime || "N/A",
+          });
+        });
+        const globalKeys = Object.keys(uniqueRecords);
+        globalInfo.innerHTML = `Total Employees: ${globalKeys.length}`;
+        Object.values(uniqueRecords).forEach((record) => {
+          record.Sessions.forEach((session, index) => {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+              ${
+                index === 0
+                  ? `<td rowspan="${record.Sessions.length}">${record.EmployeeNumber}</td>`
+                  : ""
+              }
+              ${
+                index === 0
+                  ? `<td rowspan="${record.Sessions.length}">${record.Title}</td>`
+                  : ""
+              }
+              <td>${session.SessionList}</td>
+              <td>${session.PersonalNotes}</td>
+              <td>${session.SessionTime}</td>
+              <td>${session.OverallTime}</td>
+            `;
+            tableBody.appendChild(row);
+          });
+        });
+      }
+      function generateChart(data) {
+        const ctx = document.getElementById("chart").getContext("2d");
+        const labels = data.map((item) => item.SessionList || "Unknown");
+        const values = labels.reduce((acc, curr) => {
+          acc[curr] = (acc[curr] || 0) + 1;
+          return acc;
+        }, {});
+        new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: Object.keys(values),
+            datasets: [
+              {
+                label: "Coaching Requests",
+                data: Object.values(values),
+                backgroundColor: ["#ff9f43", "#ff3f34", "#72edf2", "#5151e5"],
+                borderWidth: 1,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            scales: { y: { beginAtZero: true } },
+          },
+        });
+      }
+
+      fetchExcelData("/Coaching History/COACHINGHISTORY.xlsx");
+    </script>
+  </body>
+</html>
